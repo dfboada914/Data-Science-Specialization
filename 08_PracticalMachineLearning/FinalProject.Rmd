@@ -1,0 +1,165 @@
+---
+title: "Practical Machine Learning Project"
+output: html_notebook
+---
+
+# Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+# Functions
+
+```{r}
+# Total de Na's en todas las columnas para analizar si eliminar los registros o hacer reemplazo de valores
+verificarNas <- function(df){
+    
+    nas <- c()
+    for (i in 1:ncol(df)){
+        
+        nas <- c(nas,round(mean(is.na(df[,i])),3))
+        
+    }
+    nas <- data.frame(nas)
+    nas$Numero <- 1:ncol(df) 
+    nas$Nombre <- names(df)
+    nas <- nas[nas$nas>0,c(2,3,1)]
+    nas
+    
+}
+```
+
+
+# Data Processing
+
+First I need to load some packages
+
+```{r}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(corrplot)
+library(corrgram)
+```
+
+## Load the data
+
+I have the data in a local folder.
+
+```{r}
+test <- read.csv("pml-testing.csv")
+train <- read.csv("pml-training.csv")
+```
+
+I want to verify the dimensions of the datasets
+
+```{r}
+dim(train)
+```
+
+The train set has 19622 rows and 160 features.
+
+```{r}
+dim(test)
+```
+
+The test set has 20 rows and 160 features
+
+## Clean the data
+
+I will clean the data analyzing the missing values.
+
+```{r}
+nas <- verificarNas(train)
+nas
+```
+
+As we can see there are 67 features that have a lot of missing values - 97,9%. So I will remove them from the data set.
+
+```{r}
+vars <- nas$Numero
+train <- train[,-vars]
+test <- test[,-vars]
+
+nas <- verificarNas(test)
+vars <- nas$Numero
+train <- train[,-vars]
+test <- test[,-vars]
+```
+
+Also I should clean the variables that don't contribute to the measurements. 
+
+```{r}
+classe <- train$classe
+trainRemove <- grepl("^X|timestamp|window|id", names(train))
+train <- train[, !trainRemove]
+train <- train[, sapply(train, is.numeric)]
+train$classe <- classe
+
+testRemove <- grepl("^X|timestamp|window|id", names(test))
+test <- test[, !testRemove]
+test <- test[, sapply(test, is.numeric)]
+```
+
+
+## Split
+
+I will split the data using 70% for training and 30% for test.
+
+```{r}
+set.seed(1204)
+inTrain <- createDataPartition(train$classe, p=0.70, list=F)
+trainData <- train[inTrain, ]
+testData <- train[-inTrain, ]
+```
+
+# Modeling
+
+In this model we want to predict the activity that the person is doing. So I will use Random forest because is very powerfull for this use case. 
+
+```{r}
+controlRf <- trainControl(method="cv", 5)
+modelRf <- train(classe ~ ., data=trainData, method="rf", trControl=controlRf, ntree=200)
+modelRf
+```
+
+
+
+```{r}
+predictRf <- predict(modelRf, testData)
+confusionMatrix(testData$classe, predictRf)
+```
+
+```{r}
+accuracy <- postResample(predictRf, testData$classe)
+accuracy
+```
+
+```{r}
+oose <- 1 - as.numeric(confusionMatrix(testData$classe, predictRf)$overall[1])
+oose
+```
+
+The results are that the accuracy of the model is 99.39% and the out of sample error is 0.61%.
+
+# Predictions
+
+```{r}
+result <- predict(modelRf, test)
+result
+```
+
+# Visualization
+
+```{r}
+treeModel <- rpart(classe ~ ., data=trainData, method="class")
+prp(treeModel)
+```
+
+
+
+
+
+
+
+
